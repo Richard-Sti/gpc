@@ -21,7 +21,7 @@ from sklearn.base import clone
 def residuals_gpr(gpr, X, y, train, test, weights=None, Xeval=None,
                   return_gpr=False, clone_gpr=True):
     """
-    Fit a Gaussian process regressor (GPR) on the training set and score the
+    Fit a 1D Gaussian process regressor (GPR) on the training set and score the
     fit on the test set. If `Xeval` is not `None` evaluates the GPR on it,
     otherwise assumes that `Xeval = X`. Optionally returns the fitted GPR.
 
@@ -30,8 +30,8 @@ def residuals_gpr(gpr, X, y, train, test, weights=None, Xeval=None,
     ----------
     gpr : py:class:`sklearn.gaussian_process.GaussianProcessRegressor`
         The unfitted GPR instance.
-    X : 2-dimensional array
-        The input samples of shape (n_samples, n_features).
+    X : 1-dimensional array
+        The input samples of shape (n_samples, ).
     y : 1-dimensional array
         The target values of shape (n_samples, ).
     train : 1-dimensional array
@@ -61,12 +61,19 @@ def residuals_gpr(gpr, X, y, train, test, weights=None, Xeval=None,
     gpr : py:class:sklearn.gaussian_process.GaussianProcessRegressor, optional
         The fitted GPR instance.
     """
+    if X.ndim > 1:
+        raise TypeError("`X` must be a 1-dimensional array.")
+    if Xeval is not None and Xeval.ndim > 1:
+        raise TypeError("`Xeval` must be a 1-dimensional array.")
+    X = X.reshape(-1, 1)
+    Xeval = X if Xeval is None else Xeval.reshape(-1, 1)
+
     gpr = clone(gpr) if clone_gpr else gpr
     gpr.fit(X[train], y[train])
     residuals = y - gpr.predict(X)
     score = gpr.score(X[test], y[test],
                       weights[test] if weights is not None else None)
-    yeval = gpr.predict(Xeval if Xeval is not None else X)
+    yeval = gpr.predict(Xeval)
 
     out = (residuals, score, yeval)
     out = out + (gpr,) if return_gpr else out
