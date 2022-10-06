@@ -13,5 +13,27 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-from .model import (run_gpr, run_gpr_folds, partial_correlation)
-from .utils import train_test_from_mask
+import numpy
+
+
+def train_test_from_mask(test_mask):
+    """
+    Return train and test indices from a test mask.
+
+    Parameters
+    ----------
+    test_mask : 1-dimensional array
+        Boolean array of shape `(n_samples, )`, where `True` indicates that the
+        sample belongs to the test set.
+
+    Returns
+    -------
+    train : 1-dimensional array
+        Training set indices.
+    test : 1-dimensional array
+        Test set indices.
+    """
+    if test_mask.ndim != 1:
+        raise TypeError("`test_mask` must be a 1-dimensional array.")
+    _x = numpy.arange(test_mask.size)
+    return _x[~test_mask], _x[test_mask]

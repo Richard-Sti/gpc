@@ -15,66 +15,106 @@
 
 """ Hmmmm """
 
+import numpy
 from sklearn.base import clone
+from tqdm import tqdm
+
+from .utils import train_test_from_mask
 
 
-def residuals_gpr(gpr, X, y, train, test, weights=None, Xeval=None,
-                  return_gpr=False, clone_gpr=True):
+def run_gpr(gpr, x, y, test_mask=None, weights=None, clone_gpr=True):
     """
-    Fit a 1D Gaussian process regressor (GPR) on the training set and score the
-    fit on the test set. If `Xeval` is not `None` evaluates the GPR on it,
-    otherwise assumes that `Xeval = X`. Optionally returns the fitted GPR.
-
+    Fit a 1D Gaussian process regressor (GPR) and return the predicted value
+    and score. If available performs a train-test split to fit and evaluate
+    the GPR.
 
     Parameters
     ----------
     gpr : py:class:`sklearn.gaussian_process.GaussianProcessRegressor`
         The unfitted GPR instance.
-    X : 1-dimensional array
+    x : 1-dimensional array
         The input samples of shape (n_samples, ).
     y : 1-dimensional array
         The target values of shape (n_samples, ).
-    train : 1-dimensional array
-        The training samples' indices.
-    test : 1-dimensional array
-        The test samples' indices.
+    test_mask : 1-dimensional array, optional
+        Boolean array of shape `(n_samples, )`, where `True` indicates that the
+        sample belongs to the test set. If `None` does not perform a train-test
+        split.
     weights : 1-dimensional array, optional
         The target weights. GPR does not consider weights while fitting, used
         only for scoring. By default `None`.
-    Xeval : 2-dimensional array, optional.
-        Supplementary array on which to evaluate the GPR if specified.
     return_gpr: bool, optional
         Whether to also return the fitted GPR. By default False.
     clone_gpr : bool, optional
         Whether to clone the GPR instance. By default True.
 
-
     Returns
     -------
-    residuals : 1-dimensional array
-        The GPR residuals defined as `ytrue - ypred`.
+    ypred : 1-dimensional array
+        The predicted values of shape (n_samples, ).
     score : float
-        The :math:`R^2` regression score on the test set.
-    yeval : 1-dimensional array
-        Array of GPR predictions corresponding to `Xeval`. If `Xeval` was not
-        specified is `None`.
-    gpr : py:class:sklearn.gaussian_process.GaussianProcessRegressor, optional
-        The fitted GPR instance.
+        The :math:`R^2` score. Evaluated on the test set if available.
     """
-    if X.ndim > 1:
-        raise TypeError("`X` must be a 1-dimensional array.")
-    if Xeval is not None and Xeval.ndim > 1:
-        raise TypeError("`Xeval` must be a 1-dimensional array.")
-    X = X.reshape(-1, 1)
-    Xeval = X if Xeval is None else Xeval.reshape(-1, 1)
+    if x.ndim != 1:
+        raise TypeError("`x` must be a 1-dimensional array.")
+    x = x.reshape(-1, 1)
+    # Test-train split
+    if test_mask is None:
+        train = test = numpy.arange(test_mask.size)
+    else:
+        train, test = train_test_from_mask(test_mask)
 
     gpr = clone(gpr) if clone_gpr else gpr
-    gpr.fit(X[train], y[train])
-    residuals = y - gpr.predict(X)
-    score = gpr.score(X[test], y[test],
-                      weights[test] if weights is not None else None)
-    yeval = gpr.predict(Xeval)
+    gpr.fit(x[train], y[train])
 
-    out = (residuals, score, yeval)
-    out = out + (gpr,) if return_gpr else out
-    return out
+    ypred = gpr.predict(x)
+    score = gpr.score(x[test], y[test],
+                      weights[test] if weights is not None else None)
+    return ypred, score
+
+
+def run_gpr_folds(gpr, x, y, test_masks, weights=None, verbose=True, return_full=False):
+
+    Nrepeat, Nsamples = test_masks.shape
+
+    ypred = numpy.full((Nrepeat, Nsamples), numpy.nan)
+    score = numpy.full(Nrepeat, numpy.nan)
+
+
+    iters = range(Nrepeat)
+    iters = tqdm(iters) if verbose else iters
+    for i in iters:
+        mask = test_masks[i, :]
+        ypred[i, :], score[i] = run_gpr(gpr, x, y, mask, weights=weights)
+
+    ypred = ypred if return_full else numpy.mean(ypred, axis=0)
+    return ypred, score
+
+
+def partial_correlation(x, y, z, gpr, test_mask=None, partial=False, verbose=True):
+    """Simplify theif else statements. Allow for X having more dimensions."""
+
+    from scipy.stats import spearmanr
+
+
+    if test_mask.ndim > 1:
+        xz, score_xz = run_gpr_folds(gpr, z, x, test_mask, verbose=verbose)
+        if partial:
+            yz, score_yz = run_gpr_folds(gpr, z, y, test_mask, verbose=verbose)
+        else:
+            yz, score_yz = y, numpy.full_like(score_xz, numpy.nan)
+    else:
+        xz, score_xz = run_gpr(gpr, z, x, test_mask)
+        if partial:
+            yz, score_yz = run_gpr(gpr, z, y, test_mask)
+        else:
+            yz, score_yz = y, numpy.nan
+
+    dxz = x - xz
+    dyz = y - yz
+
+    print(score_xz, score_yz)
+    print(spearmanr(x, y))
+    print(spearmanr(dxz, dyz))
+    return dxz, dyz
+
