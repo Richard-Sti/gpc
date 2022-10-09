@@ -225,6 +225,30 @@ def fold_average(arr, weights=None):
     return numpy.mean(arr, axis=-1)
 
 
+def _pick_correlation(corr):
+    """
+    Boilerplate function to return correlation statistic by name from a
+    predefined dictionary and print a useful error message if needed.
+
+    Paramteres
+    ----------
+    corr : string
+        Correlation statistic. By default `spearman`, supported
+        are `[spearman, pearson]`.
+
+    Returns
+    -------
+    corr_func : py:func
+        Correlation function that returns the correlation coefficient and
+        p-value.
+    """
+    keys = CORRMEASURES.keys()
+    if corr not in keys:
+        raise ValueError("Supported correlators are: `{}`."
+                         .format(list(CORRMEASURES.keys())))
+    return CORRMEASURES[corr]
+
+
 def partial_correlation(dxz, dyz, corr="spearman"):
     """
     Calculate the partial correlation between columns of `dxz` and `dyz`.
@@ -247,11 +271,7 @@ def partial_correlation(dxz, dyz, corr="spearman"):
         Array of shape `(n_xfeats, 2)`, where the 2nd index represents the
         correlation coefficient and its p-value.
     """
-    keys = CORRMEASURES.keys()
-    if corr not in keys:
-        raise ValueError("Supported correlators are: `{}`."
-                         .format(list(CORRMEASURES.keys())))
-    corr = CORRMEASURES[corr]
+    corr = _pick_correlation(corr)
 
     Nxfeat = dxz.shape[1]
     out = numpy.full((Nxfeat, 2), numpy.nan)
@@ -262,20 +282,56 @@ def partial_correlation(dxz, dyz, corr="spearman"):
     return out
 
 
-def local_partial_correlation(dxz, dyz, p, peval, width, kernel="gaussian"):
-    pass
-    # indxs = np.arange(z.size)
-    # out = np.full((Neval, Nrepeat, 2), np.nan)
-    #
-    # from tqdm import tqdm
-    #
-    # for i in tqdm(range(Neval)):
-    #     p = norm(zeval[i], width).pdf(z)
-    #     p /= p.sum()
-    #     for j in range(Nrepeat):
-    #         choice = np.random.choice(indxs, size=N, replace=True, p=p)
-    #
-    #         out[i, j, :] = spearmanr(x[choice], y[choice])
+def kernel_weights(p, loc, scale, kernel):
+    """
+    Probability density at `p` of a kernel defined by `loc` and `scale`.
+
+    Parameters
+    ----------
+    p : 1-dimensional array
+        Where to evaluate the kernel distribution.
+    loc : float
+        The location of the distribution.
+    scale : float
+        The scale of the distribution.
+    kernel : str
+        Kernel, allowed choices are `["gaussian", "tophat"]`.
+
+    Returns
+    -------
+    weights : 1-dimensional array
+        The kernel weights.
+    """
+    allowed = ["gaussian", "tophat"]
+
+    if kernel == "gaussian":
+        dist = stats.norm(loc, scale)
+    elif kernel == "tophat":
+        dist = stats.norm(loc, scale)
+    else:
+        raise ValueError("Allowed kernels are `{}`.".format(allowed))
+
+    weights = dist.pdf(p)
+    weights /= weights.sum()
+    return weights
+
+
+def local_partial_correlation(dxz, dyz, p, peval, width, Nrepeat, choice_mult=1, kernel="gaussian", corr="spearman"):
+    """ Still need to add work if dxz has many features!"""
+
+    Nchoice = choice_mult * p.size
+    indxs = numpy.arange(p.size)
+    Neval = peval.size
+    out = numpy.full((Neval, Nrepeat, 2), numpy.nan)
+    corr = _pick_correlation(corr)
+
+    for i in tqdm(range(Neval)):
+        weights = kernel_weights(p, peval[i], width, kernel)
+
+        for j in range(Nrepeat):
+            choice = numpy.random.choice(indxs, size=Nchoice, replace=True,
+                                         p=weights)
+            out[i, j, :] = corr(x[choice], y[choice])
 #    from scipy.stats import spearmanr
 #    print(score_xz, score_yz)
 #    print(spearmanr(x, y))
