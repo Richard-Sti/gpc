@@ -13,14 +13,14 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-""" Hmmmm """
+"""Regressor functions and (local) partial correlation functions."""
 
 import numpy
 from scipy import stats
 from sklearn.base import clone
 from tqdm import tqdm
 
-from .utils import train_test_from_mask
+from .utils import (train_test_from_mask, kernel_weights)
 
 
 CORRMEASURES = {"pearson": stats.pearsonr,
@@ -200,28 +200,6 @@ def get_reg_residuals(reg, x, y, z, test_mask=None, weights=None, partial=False,
     return dxz, dyz, fullout
 
 
-def fold_average(arr, weights=None):
-    """
-    Calculates average over folds of an `n`-dimensional array, assuming that
-    the folds are under the last index.
-
-    Parameters
-    ----------
-    arr : n-dimensional array
-        Array to be averaged over the last index.
-    weights : NOT SUPPORTED
-        DESCR.
-
-    Returns
-    -------
-    arr : n-dimensional array
-        Array averaged over the last index.
-    """
-    if weights is not None:
-        raise NotImplementedError("Weighting schemes are not implemented yet.")
-    return numpy.mean(arr, axis=-1)
-
-
 def _pick_correlation(corr):
     """
     Boilerplate function to return correlation statistic by name from a
@@ -277,40 +255,6 @@ def partial_correlation(dxz, dyz, corr="spearman"):
         out[i, :] = corr(dxz[:, i], dyz)
 
     return out
-
-
-def kernel_weights(p, loc, scale, kernel):
-    """
-    Probability density at `p` of a kernel defined by `loc` and `scale`.
-
-    Parameters
-    ----------
-    p : 1-dimensional array
-        Where to evaluate the kernel distribution.
-    loc : float
-        The location of the distribution.
-    scale : float
-        The scale of the distribution.
-    kernel : str
-        Kernel, allowed choices are `["gaussian", "tophat"]`.
-
-    Returns
-    -------
-    weights : 1-dimensional array
-        The kernel weights.
-    """
-    allowed = ["gaussian", "tophat"]
-
-    if kernel == "gaussian":
-        dist = stats.norm(loc, scale)
-    elif kernel == "tophat":
-        dist = stats.norm(loc, scale)
-    else:
-        raise ValueError("Allowed kernels are `{}`.".format(allowed))
-
-    weights = dist.pdf(p)
-    weights /= weights.sum()
-    return weights
 
 
 def local_partial_correlation(dxz, dyz, p, peval, width, Nrepeat,
