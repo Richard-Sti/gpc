@@ -73,12 +73,9 @@ def run_gpr(gpr, x, y, test_mask=None, weights=None, clone_gpr=True):
     return ypred, score
 
 
-def run_gpr_folds(gpr, x, y, test_masks, weights=None, verbose=True,
-                  return_full=False):
+def run_gpr_folds(gpr, x, y, test_masks, weights=None, verbose=True):
     """
     Run the GPR over cross-validation (CV) folds defined by `test_masks`.
-
-    TODO: weighted average?
 
     Parameters
     ----------
@@ -96,17 +93,13 @@ def run_gpr_folds(gpr, x, y, test_masks, weights=None, verbose=True,
         weights while fitting, used only for scoring. By default `None`.
     verbose : bool, optional
         Verbosity flag of the folding iterator. By default `True`.
-    return_full : bool, optional
-        Verbosity flag whether to return the predictions of each fold.
-        Otherwise averages over all folds.
 
     Returns
     -------
-    ypred : 1- or 2-dimensional array
-        Predicted values of shape `(n_samples, n_folds)` or `(n_samples, )`.
+    ypred : 2-dimensional array
+        Predicted values of shape `(n_samples, n_folds)`.
     score : float or 1-dimensional array
-        Averaged folding score or a 1-dimensional array of each fold's score of
-        shape (`n_folds`, ).
+        1-dimensional array of each fold's score of shape (`n_folds`, ).
     """
     Nfolds, Nsamples = test_masks.shape
 
@@ -120,17 +113,12 @@ def run_gpr_folds(gpr, x, y, test_masks, weights=None, verbose=True,
         mask = test_masks[i, :]
         ypred[:, i], score[i] = run_gpr(gpr, x, y, mask, weights=weights)
 
-    # Weighted?
-    if not return_full:
-        ypred = numpy.mean(ypred, axis=1)
-        score = numpy.mean(score)
     return ypred, score
 
 
 def get_gpr_residuals(x, y, z, gpr, test_mask=None, partial=False,
                       verbose=True, return_full=False):
     """
-    Simplify theif else statements. Allow for X having more dimensions.
 
 
     Parameters
@@ -156,9 +144,8 @@ def get_gpr_residuals(x, y, z, gpr, test_mask=None, partial=False,
     # Preallocate arrays
     Nsamp, Nxfeat = x.shape
     Nfolds = test_mask.shape[0]
-    outshape = (Nsamp, Nxfeat, Nfolds) if return_full else (Nsamp, Nxfeat)
-    xz = numpy.full(outshape, numpy.nan)
-    scorexz = numpy.full(outshape[1:], numpy.nan)
+    xz = numpy.full((Nsamp, Nxfeat, Nfolds), numpy.nan)
+    scorexz = numpy.full((Nxfeat, Nfolds), numpy.nan)
 
     # Fit the GP for the `x` features
     for i in range(Nxfeat):
@@ -177,9 +164,6 @@ def get_gpr_residuals(x, y, z, gpr, test_mask=None, partial=False,
                "yz": yz,
                "score_yz": scoreyz}
 
-    # Average over folds
-    if return_full:
-        xz = numpy.mean(xz, axis=1)
 
     return x - xz, y - yz, fullout
 
