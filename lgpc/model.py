@@ -16,10 +16,15 @@
 """ Hmmmm """
 
 import numpy
+from scipy import stats
 from sklearn.base import clone
 from tqdm import tqdm
 
 from .utils import train_test_from_mask
+
+
+CORRMEASURES = {"pearson": stats.pearsonr,
+                "spearman": stats.spearmanr}
 
 
 def run_gpr(gpr, x, y, test_mask=None, weights=None, clone_gpr=True):
@@ -198,7 +203,66 @@ def get_gpr_residuals(gpr, x, y, z, test_mask=None, weights=None, partial=False,
     return dxz, dyz, fullout
 
 
-def partial_correlation(dxz, dyz, p, peval, width, kernel="gaussian"):
+def fold_average(arr, weights=None):
+    """
+    Calculates average over folds of an `n`-dimensional array, assuming that
+    the folds are under the last index.
+
+    Parameters
+    ----------
+    arr : n-dimensional array
+        Array to be averaged over the last index.
+    weights : NOT SUPPORTED
+        DESCR.
+
+    Returns
+    -------
+    arr : n-dimensional array
+        Array averaged over the last index.
+    """
+    if weights is not None:
+        raise NotImplementedError("Weighting schemes are not implemented yet.")
+    return numpy.mean(arr, axis=-1)
+
+
+def partial_correlation(dxz, dyz, corr="spearman"):
+    """
+    Calculate the partial correlation between columns of `dxz` and `dyz`.
+    Relies on having previously calculated their residuals with respect to a
+    control variable `z`.
+
+    Parameters
+    ----------
+    dxz : 2-dimensional array
+        Array of residuals of shape `(n_samples, nxfeats)`.
+    dyz : 1-dimensional array
+        Array of residuals of shape `(n_samples, )`.
+    corr : string
+        Correlation statistic. By default `spearman`, supported
+        are `[spearman, pearson]`.
+
+    Returns
+    -------
+    out : 2-dimensional array
+        Array of shape `(n_xfeats, 2)`, where the 2nd index represents the
+        correlation coefficient and its p-value.
+    """
+    keys = CORRMEASURES.keys()
+    if corr not in keys:
+        raise ValueError("Supported correlators are: `{}`."
+                         .format(list(CORRMEASURES.keys())))
+    corr = CORRMEASURES[corr]
+
+    Nxfeat = dxz.shape[1]
+    out = numpy.full((Nxfeat, 2), numpy.nan)
+    # Calculate the correlation of every feature in dxz with dyz
+    for i in range(Nxfeat):
+        out[i, :] = corr(dxz[:, i], dyz)
+
+    return out
+
+
+def local_partial_correlation(dxz, dyz, p, peval, width, kernel="gaussian"):
     pass
     # indxs = np.arange(z.size)
     # out = np.full((Neval, Nrepeat, 2), np.nan)
