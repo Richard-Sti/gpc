@@ -116,22 +116,49 @@ def run_gpr_folds(gpr, x, y, test_masks, weights=None, verbose=True):
     return ypred, score
 
 
-def get_gpr_residuals(x, y, z, gpr, test_mask=None, partial=False,
-                      verbose=True, return_full=False):
+def get_gpr_residuals(gpr, x, y, z, test_mask=None, weights=None, partial=False,
+                      verbose=True):
     """
-
+    Calculate residuals on `x` and `y` while predicting their values based
+    solely on `z`. `x` can contain several features, however the fit is always
+    simply from one feature to one prediction.
 
     Parameters
     ----------
+    gpr : py:class:`sklearn.gaussian_process.GaussianProcessRegressor`
+        The unfitted GPR instance.
     x : 1- or 2-dimensional array
         Correlation features of shape `(n_samples, )` or
-        `(n_samples, n_features)`.
+        `(n_samples, n_xfeatures)`.
     y : 1-dimensional array
         Correlation feature to be correlated with `x` of shape `(n_samples, )`.
     z : 1-dimensional array
         Control feature of shape `(n_samples, )`.
+    test_mask : 2-dimensional array, optional
+        Boolean array of shape `(n_folds, n_samples)`, where `True` indicates
+        that the sample belongs to the test set. Alternatively `(n_samples, )`
+        can also be accepted.
+    weights : 1-dimensional array, optional
+        The target weights of shape `(n_samples, )`. GPR does not consider
+        weights while fitting, used only for scoring. By default `None`.
+    partial : bool, optional
+        Whether to perform a `partial` partial correlation, in which case the
+        residuals of `y` with respect to `z` are not calculated and taken to
+        be `y`.
+    verbose : bool, optional
+        Verbosity flag of the folding iterator. By default `True`.
 
-
+    Returns
+    -------
+    dxz : 3-dimensional array
+        Residuals of `true` - `predicted` of `x` of shape
+        (`n_samples`, `n_xfeatures`, `n_folds`).
+    dyz : 3-dimensional array
+        Residuals of `true` - `predicted` of `y` of shape
+        (`n_samples`, `n_folds`).
+    fullout : dict
+        Additional output. Keys are `(xz, scorexz, yz, scoreyz)`. The array
+        shapes follow the notation above and the scores are :math:`R^2`.
     """
     # Enforce that y and z are 1-dimensional
     if y.ndim != 1 or z.ndim != 1:
@@ -150,38 +177,29 @@ def get_gpr_residuals(x, y, z, gpr, test_mask=None, partial=False,
     # Fit the GP for the `x` features
     for i in range(Nxfeat):
         xz[:, i, :], scorexz[i, :] = run_gpr_folds(
-            gpr, z, x[:, i], test_mask, verbose=verbose,
-            return_full=return_full)
+            gpr, z, x[:, i], test_mask, weights, verbose)
 
     if partial:
-        yz, scoreyz = run_gpr_folds(gpr, z, y, test_mask, verbose=verbose,
-                                    return_full=return_full)
-    else:
         yz, scoreyz = numpy.zeros_like(y), numpy.full_like(scorexz, numpy.nan)
+    else:
+        yz, scoreyz = run_gpr_folds(gpr, z, y, test_mask, weights, verbose)
 
-    fullout = {"xz": numpy.copy(xz),
-               "score_xz": scorexz,
+    fullout = {"xz": xz,
+               "scorexz": scorexz,
                "yz": yz,
-               "score_yz": scoreyz}
+               "scoreyz": scoreyz}
+
+    dxz = numpy.full_like(xz, numpy.nan)
+    dyz = numpy.full((Nsamp, Nfolds), numpy.nan)
+    for i in range(Nfolds):
+        dxz[..., i] = x - xz[..., i]
+        dyz[..., i] = y - yz[..., i]
+
+    return dxz, dyz, fullout
 
 
-    return x - xz, y - yz, fullout
-
-
-
-def partial_correlation(dxz, dyz, p, pbins):
+def partial_correlation(dxz, dyz, p, peval, width, kernel="gaussian"):
     pass
-    # zmin, zmax = z.min(), z.max()
-    # Neval = 100
-    # Nrepeat = 100
-    #
-    #
-    # zeval = np.linspace(zmin, zmax, Neval)
-    #
-    #
-    # width = 0.3
-    #
-    #
     # indxs = np.arange(z.size)
     # out = np.full((Neval, Nrepeat, 2), np.nan)
     #
