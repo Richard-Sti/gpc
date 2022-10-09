@@ -261,9 +261,9 @@ def partial_correlation(dxz, dyz, corr="spearman"):
         Array of residuals of shape `(n_samples, nxfeats)`.
     dyz : 1-dimensional array
         Array of residuals of shape `(n_samples, )`.
-    corr : string
+    corr : string, optional
         Correlation statistic. By default `spearman`, supported
-        are `[spearman, pearson]`.
+        are `[spearman, pearson]`. By default `"spearman"`.
 
     Returns
     -------
@@ -316,25 +316,67 @@ def kernel_weights(p, loc, scale, kernel):
     return weights
 
 
-def local_partial_correlation(dxz, dyz, p, peval, width, Nrepeat, choice_mult=1, kernel="gaussian", corr="spearman"):
-    """ Still need to add work if dxz has many features!"""
+def local_partial_correlation(dxz, dyz, p, peval, width, Nrepeat,
+                              choice_mult=1, kernel="gaussian",
+                              corr="spearman"):
+    """
+    Calculate the local partial correlation with a specified kernel as a
+    function  of `p`.
 
-    Nchoice = choice_mult * p.size
-    indxs = numpy.arange(p.size)
-    Neval = peval.size
-    out = numpy.full((Neval, Nrepeat, 2), numpy.nan)
+    Parameters
+    ----------
+    dxz : 2-dimensional array
+        Residuals of `x` while controlling for `z` of
+        shape `(n_samples, n_xfeatures)`.
+    dyz : 1-dimensional array
+        Residuals of `y` while controlling for `z` of shape `(n_samples, )`.
+    p : 1-dimensional array
+        Feature as a function of which to calculate the partial correlation.
+        Array shape must be `(n_samples, )`.
+    peval : 1-dimensional array
+        Values of feature `p` at which to evaluate the partial correlation.
+    width : float
+        The kernel width. For example, for `gaussian` it is the standard
+        deviation.
+    Nrepeat : int
+        Number of times to boostrap the correlation at a single value of `p`.
+    choice_mult : float, optional
+        Resampling fraction, such that the resampled number of points is
+        `n_samples * choice_mult`. By default 1.
+    kernel : str, optional
+        Kernel choice, one of `["gaussian", "tophat"]`. By default `"tophat"`.
+    corr : string, optional
+        Correlation statistic. By default `spearman`, supported
+        are `[spearman, pearson]`. By default `"spearman"`.
+
+    Returns
+    -------
+    cf : 3-dimensional array
+        Correlation statistic of shape `(n_eval, n_xfeatures, 2)` where
+        `n_eval = peval.size` and the last index represents the mean and
+        standard deviation, respectively.
+    ps : 2-dimensional array
+        P-values of the above correlation of shape `(n_eval, n_xfeatures)`. It
+        is calculated as geometric mean over the boostrap resamples.
+    """
     corr = _pick_correlation(corr)
 
-    for i in tqdm(range(Neval)):
+    Nchoice = int(choice_mult * p.size)
+    Neval = peval.size
+    Nxfeat = dxz.shape[1]
+
+    # Preallocate arrays and start the calculation
+    indxs = numpy.arange(p.size)
+    cf = numpy.full((Neval, Nrepeat, Nxfeat), numpy.nan)
+    ps = numpy.full((Neval, Nrepeat, Nxfeat), numpy.nan)
+    for i in range(Neval):
         weights = kernel_weights(p, peval[i], width, kernel)
-
         for j in range(Nrepeat):
-            choice = numpy.random.choice(indxs, size=Nchoice, replace=True,
-                                         p=weights)
-            out[i, j, :] = corr(x[choice], y[choice])
-#    from scipy.stats import spearmanr
-#    print(score_xz, score_yz)
-#    print(spearmanr(x, y))
-#    print(spearmanr(dxz, dyz))
-#    return dxz, dyz
+                for k in range(Nxfeat):
+                    m = numpy.random.choice(indxs, size=Nchoice, replace=True,
+                                            p=weights)
+                    cf[i, j, k], ps[i, j, k] = corr(dxz[m, k], dyz[m])
 
+    cf = numpy.stack([numpy.mean(cf, axis=1), numpy.std(cf, axis=1)], axis=-1)
+    ps = stats.mstats.gmean(ps, axis=1)
+    return cf, ps
