@@ -16,6 +16,7 @@
 """Various support functions."""
 
 import numpy
+from scipy import stats
 
 
 def train_test_from_mask(test_mask):
