@@ -27,16 +27,15 @@ CORRMEASURES = {"pearson": stats.pearsonr,
                 "spearman": stats.spearmanr}
 
 
-def run_gpr(gpr, x, y, test_mask=None, weights=None, clone_gpr=True):
+def run_reg(reg, x, y, test_mask=None, weights=None, clone_reg=True):
     """
-    Fit a 1D Gaussian process regressor (GPR) and return the predicted value
-    and score. If available performs a train-test split to fit and evaluate
-    the GPR.
+    Fit a regressor and return the predicted value and score. If available
+    performs a train-test split to fit and evaluate the regressor.
 
     Parameters
     ----------
-    gpr : py:class:`sklearn.gaussian_process.GaussianProcessRegressor`
-        The unfitted GPR instance.
+    reg : regressor instance
+        The unfitted regressor.
     x : 1-dimensional array
         The input samples of shape (n_samples, ).
     y : 1-dimensional array
@@ -46,12 +45,10 @@ def run_gpr(gpr, x, y, test_mask=None, weights=None, clone_gpr=True):
         sample belongs to the test set. If `None` does not perform a train-test
         split.
     weights : 1-dimensional array, optional
-        The target weights. GPR does not consider weights while fitting, used
-        only for scoring. By default `None`.
-    return_gpr: bool, optional
-        Whether to also return the fitted GPR. By default False.
-    clone_gpr : bool, optional
-        Whether to clone the GPR instance. By default True.
+        The target weights. Not considered while fitting, used only for
+        scoring. By default `None`.
+    clone_reg : bool, optional
+        Whether to clone the regressor. By default `True`.
 
     Returns
     -------
@@ -69,23 +66,23 @@ def run_gpr(gpr, x, y, test_mask=None, weights=None, clone_gpr=True):
     else:
         train, test = train_test_from_mask(test_mask)
 
-    gpr = clone(gpr) if clone_gpr else gpr
-    gpr.fit(x[train], y[train])
+    reg = clone(reg) if clone_reg else reg
+    reg.fit(x[train], y[train])
 
-    ypred = gpr.predict(x)
-    score = gpr.score(x[test], y[test],
+    ypred = reg.predict(x)
+    score = reg.score(x[test], y[test],
                       weights[test] if weights is not None else None)
     return ypred, score
 
 
-def run_gpr_folds(gpr, x, y, test_masks, weights=None, verbose=True):
+def run_reg_folds(reg, x, y, test_masks, weights=None, verbose=True):
     """
-    Run the GPR over cross-validation (CV) folds defined by `test_masks`.
+    Run the regressor over cross-validation (CV) folds defined by `test_masks`.
 
     Parameters
     ----------
-    gpr : py:class:`sklearn.gaussian_process.GaussianProcessRegressor`
-        The unfitted GPR instance.
+    reg : regressor instance
+        The unfitted regressor.
     x : 1-dimensional array
         The input samples of shape (n_samples, ).
     y : 1-dimensional array
@@ -94,8 +91,8 @@ def run_gpr_folds(gpr, x, y, test_masks, weights=None, verbose=True):
         Boolean array of shape `(n_folds, n_samples)`, where `True` indicates
         that the sample belongs to the test set.
     weights : 1-dimensional array, optional
-        The target weights of shape `(n_samples, )`. GPR does not consider
-        weights while fitting, used only for scoring. By default `None`.
+        The target weights of shape `(n_samples, )`. Not considered while
+        fitting, used only for scoring. By default `None`.
     verbose : bool, optional
         Verbosity flag of the folding iterator. By default `True`.
 
@@ -116,12 +113,12 @@ def run_gpr_folds(gpr, x, y, test_masks, weights=None, verbose=True):
     iters = tqdm(iters) if verbose else iters
     for i in iters:
         mask = test_masks[i, :]
-        ypred[:, i], score[i] = run_gpr(gpr, x, y, mask, weights=weights)
+        ypred[:, i], score[i] = run_reg(reg, x, y, mask, weights=weights)
 
     return ypred, score
 
 
-def get_gpr_residuals(gpr, x, y, z, test_mask=None, weights=None, partial=False,
+def get_reg_residuals(reg, x, y, z, test_mask=None, weights=None, partial=False,
                       verbose=True):
     """
     Calculate residuals on `x` and `y` while predicting their values based
@@ -130,8 +127,8 @@ def get_gpr_residuals(gpr, x, y, z, test_mask=None, weights=None, partial=False,
 
     Parameters
     ----------
-    gpr : py:class:`sklearn.gaussian_process.GaussianProcessRegressor`
-        The unfitted GPR instance.
+    reg : regressor instance
+        The unfitted regressor.
     x : 1- or 2-dimensional array
         Correlation features of shape `(n_samples, )` or
         `(n_samples, n_xfeatures)`.
@@ -144,8 +141,8 @@ def get_gpr_residuals(gpr, x, y, z, test_mask=None, weights=None, partial=False,
         that the sample belongs to the test set. Alternatively `(n_samples, )`
         can also be accepted.
     weights : 1-dimensional array, optional
-        The target weights of shape `(n_samples, )`. GPR does not consider
-        weights while fitting, used only for scoring. By default `None`.
+        The target weights of shape `(n_samples, )`. Not considered while
+        fitting, used only for scoring. By default `None`.
     partial : bool, optional
         Whether to perform a `partial` partial correlation, in which case the
         residuals of `y` with respect to `z` are not calculated and taken to
@@ -181,13 +178,13 @@ def get_gpr_residuals(gpr, x, y, z, test_mask=None, weights=None, partial=False,
 
     # Fit the GP for the `x` features
     for i in range(Nxfeat):
-        xz[:, i, :], scorexz[i, :] = run_gpr_folds(
-            gpr, z, x[:, i], test_mask, weights, verbose)
+        xz[:, i, :], scorexz[i, :] = run_reg_folds(
+            reg, z, x[:, i], test_mask, weights, verbose)
 
     if partial:
         yz, scoreyz = numpy.zeros_like(y), numpy.full_like(scorexz, numpy.nan)
     else:
-        yz, scoreyz = run_gpr_folds(gpr, z, y, test_mask, weights, verbose)
+        yz, scoreyz = run_reg_folds(reg, z, y, test_mask, weights, verbose)
 
     fullout = {"xz": xz,
                "scorexz": scorexz,
