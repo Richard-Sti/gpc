@@ -16,7 +16,6 @@ The package can be pip-installed with, e.g. `python -m pip install --user .` exe
 An example notebook is provided [here](https://github.com/Richard-Sti/gpc/blob/main/scripts/example.ipynb), however see below for a short example.
 
 
-
 ```python
 ...
 
@@ -31,3 +30,7 @@ pc = gpc.partial_correlation(dxz, dyz)
 ```
 
 In the example above the model can be similarly replaced with a [Gaussian process regressor](https://scikit-learn.org/stable/modules/generated/sklearn.gaussian_process.GaussianProcessRegressor.html).
+
+
+## License
+[GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.en.html)
