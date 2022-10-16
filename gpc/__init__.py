@@ -14,6 +14,5 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 from .model import (run_reg, run_reg_folds, get_reg_residuals,
-                    partial_correlation,
-                    local_partial_correlation)
+                    partial_correlation)
 from .utils import (train_test_from_mask, fold_average)
