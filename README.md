@@ -1,1 +1,1 @@
-# Local Generalised Partial Correlation
+# Generalised Partial Correlation
